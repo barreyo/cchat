@@ -106,11 +106,9 @@ loop(St, {leave, Channel}) ->
             {{error, not_connected, "Not connected to any server."}, St};
         
         true ->
-
             case lists:member(Channel, St#cl_st.channels) of
 
                 true ->                    
-
                     Request = helper:request(list_to_atom(St#cl_st.server), {leave_channel, Channel, St#cl_st.username, self()}),
 
                     case Request of

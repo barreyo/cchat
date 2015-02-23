@@ -1,5 +1,5 @@
 -module(channel).
--export([main/1, initial_state/2]).
+-export([main/1, initial_state/1]).
 -include_lib("./defs.hrl").
 
 %% Handle incoming requests and keep the 
@@ -14,24 +14,24 @@ main(State) ->
     end.
 
 %% Set the initial state of the channel.
-initial_state(ChannelName, InitialUser) ->
-    #channel_st{channelName = ChannelName}.
+initial_state(ChannelName) ->
+    #channel_st{channelName = ChannelName, users = []}.
 
 %% Join channel
 loop(State, {join_channel, Username, Pid}) ->
 	
 	%% Check if the there exist a user with name of the new user.
-	InUse = lists:keymember(Username, 1, State#channel_st.users),
+	AlreadyInChannel = lists:keymember(Username, 1, State#channel_st.users),
 
 	if 
 		%% Add the new user to the channel and reference the Pid of the user.
-		InUse == false ->
+		AlreadyInChannel == false ->
 			NewUsersList = State#channel_st.users ++ [{Username, Pid}],
 			NewState = State#channel_st{users = NewUsersList},
 			{ok, NewState};
 
 		%% Return an error if the user already in the channel.
-		InUse == true ->
+		AlreadyInChannel == true ->
 			{{error, user_already_joined}, State}
 
 	end;
@@ -42,18 +42,19 @@ loop(State, {leave_channel, Username, Pid}) ->
 	%% Check if the user is in the channel
 	UserInChannel = lists:keymember(Username, 1, State#channel_st.users),
 
-	if 
-		%% Return error if user not in channel
-		UserInChannel == false ->
-			{{error, user_not_joined}, State};
+	case UserInChannel of 
 
 		%% Remove from channel
-		UserInChannel == true ->
+		true ->
 			NewUsersList = State#channel_st.users -- [{Username, Pid}],
 			NewState = State#channel_st{users = NewUsersList},
 			{ok, NewState}
 
-	end;
+		%% Return error if user not in channel
+		false ->
+			{{error, user_not_joined}, State};
+
+	end.
 
 
 

@@ -48,10 +48,11 @@ loop(State, {disconnect, Username, Pid}) ->
 %% Join channel if it exist otherwise create a new one and join.
 loop(State, {join_channel, Channel, Username, Pid}) ->
 	
-	Result = lists:keyfind(Channel, 1, State#server_st.channels),
+	Result = lists:keymember(Channel, 1, State#server_st.channels),
 
-	if 
-		Result == false ->
+	case Result of 
+		
+		false ->
 			helper:start(list_to_atom(Channel), channel:initial_state(Channel), fun channel:main/1),
 			helper:requestAsync(list_to_atom(Channel), {join_channel, Username, Pid}),
 			NewChannelsList = State#server_st.channels ++ [Channel],
@@ -68,15 +69,14 @@ loop(State, {leave_channel, Channel, Username, Pid}) ->
 	
 	Result = lists:keymember(Channel, 1, State#server_st.channels),
 
-	if 
-		Result == false ->
-			{{error, unable_to_find_channel}, State};
+	case Result of 
 
 		true ->
 			helper:requestAsync(list_to_atom(Channel), {leave_channel, Username, Pid}),
-			NewChannelsList = State#server_st.channels -- [Channel],
-			NewState = State#server_st{channels = NewChannelsList},
-			{ok, NewState}
+			{ok, State};
+
+		false ->
+			{{error, unable_to_find_channel}, State}
 
 	end.
 
