@@ -35,14 +35,14 @@ loop(St, {connect, Server}) ->
             case lists:member(list_to_atom(Server), registered()) of
 
                 true ->
-                    Request = helper:request(list_to_atom(Server), {connect, St#cl_st.username, self()}),
-
-                    case Request of
+                    case helper:request(list_to_atom(Server), {connect, St#cl_st.username, self()}) of
                         ok ->
                             NewState = St#cl_st{server = Server},
                             {ok, NewState};
+
                         {error, user_already_connected} ->
                             {{error, user_already_connected, "Username is already taken on server."}, St};
+                        
                         _Error ->
                             {{error, generic_error, "Errorororors."}, St}
 
@@ -82,9 +82,7 @@ loop(St, {join, Channel}) ->
                     {{error, user_already_joined, "Already in this channel."}, St};
 
                 false ->                    
-                    Request = helper:request(list_to_atom(St#cl_st.server), {join_channel, Channel, St#cl_st.username, self()}),
-
-                    case Request of
+                    case helper:request(list_to_atom(St#cl_st.server), {join_channel, Channel, St#cl_st.username, self()}) of
                         ok ->
                             NewChannelList = St#cl_st.channels ++ [Channel],
                             NewState = St#cl_st{channels = NewChannelList},
@@ -104,6 +102,7 @@ loop(St, {join, Channel}) ->
 %% Leave channel
 loop(St, {leave, Channel}) ->
 
+    %% Check if the user is even connected to any server.
     if 
         St#cl_st.server == disconnected ->
             {{error, not_connected, "Not connected to any server."}, St};
@@ -111,10 +110,9 @@ loop(St, {leave, Channel}) ->
         true ->
             case lists:member(Channel, St#cl_st.channels) of
 
-                true ->                    
-                    Request = helper:request(list_to_atom(St#cl_st.server), {leave_channel, Channel, St#cl_st.username, self()}),
-
-                    case Request of
+                %% Request to leave the channel.
+                true ->                   
+                    case helper:request(list_to_atom(St#cl_st.server), {leave_channel, Channel, St#cl_st.username, self()}) of
                         ok ->
                             NewChannelList = St#cl_st.channels -- [Channel],
                             NewState = St#cl_st{channels = NewChannelList},
@@ -127,14 +125,16 @@ loop(St, {leave, Channel}) ->
                             {{error, generic_error, "Channel error."}, St}
                     end;
                 
+                %% Return error if the user is not in the channel
                 false ->
                     {{error, user_not_joined, "Not in this channel."}, St}
             end
     end;
 
-% Sending messages
+%% Sending messages
 loop(St, {msg_from_GUI, Channel, Msg}) ->
     
+    %% Check if the user is even connected to any server.
     if 
         St#cl_st.server == disconnected ->
             {{error, not_connected, "Not connected to any server."}, St};
@@ -142,10 +142,9 @@ loop(St, {msg_from_GUI, Channel, Msg}) ->
         true ->
             case lists:member(Channel, St#cl_st.channels) of
 
+                %% Do a send a message to the channel.
                 true ->                    
-                    Request = helper:request(list_to_atom(St#cl_st.server), {write_message, Channel, Msg, St#cl_st.username, self()}),
-
-                    case Request of 
+                    case helper:request(list_to_atom(St#cl_st.server), {write_message, Channel, Msg, St#cl_st.username, self()}) of 
                         ok ->
                             {ok, St};
 
@@ -156,6 +155,7 @@ loop(St, {msg_from_GUI, Channel, Msg}) ->
                             {{error, generic_error, "Channel error."}, St}
                     end;
                 
+                %% Return a error if the user is not in the channel.
                 false ->
                     {{error, user_not_joined, "Not in this channel."}, St}
             end
