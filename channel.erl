@@ -21,40 +21,60 @@ initial_state(ChannelName) ->
 loop(State, {join_channel, Username, Pid}) ->
 	
 	%% Check if the there exist a user with name of the new user.
-	AlreadyInChannel = lists:keymember(Username, 1, State#channel_st.users),
-
-	if 
-		%% Add the new user to the channel and reference the Pid of the user.
-		AlreadyInChannel == false ->
-			NewUsersList = State#channel_st.users ++ [{Username, Pid}],
-			NewState = State#channel_st{users = NewUsersList},
-			{ok, NewState};
+	case lists:keymember(Username, 1, State#channel_st.users) of
 
 		%% Return an error if the user already in the channel.
-		AlreadyInChannel == true ->
-			{{error, user_already_joined}, State}
+		true ->
+			{{error, user_already_joined}, State};
 
+		%% Add the new user to the channel and reference the Pid of the user.
+		false ->
+			NewUsersList = State#channel_st.users ++ [{Username, Pid}],
+			NewState = State#channel_st{users = NewUsersList},
+			{ok, NewState}
 	end;
 
 %% Leave channel
 loop(State, {leave_channel, Username, Pid}) ->
 	
-	%% Check if the user is in the channel
-	UserInChannel = lists:keymember(Username, 1, State#channel_st.users),
+	%% Check if the user is in the channel.
+	case lists:keymember(Username, 1, State#channel_st.users) of 
 
-	case UserInChannel of 
-
-		%% Remove from channel
+		%% Remove from channel.
 		true ->
 			NewUsersList = State#channel_st.users -- [{Username, Pid}],
 			NewState = State#channel_st{users = NewUsersList},
-			{ok, NewState}
+			{ok, NewState};
 
-		%% Return error if user not in channel
+		%% Return error if user not in channel.
 		false ->
-			{{error, user_not_joined}, State};
+			{{error, user_not_joined}, State}
+
+	end;
+
+%% Send message to all users in this channel
+loop(State, {write_message, Message, Username, Pid}) ->
+	
+	%% Check if the user is in this channel.
+	case lists:keymember(Username, 1, State#channel_st.users) of
+
+		%% Send out the message to all connected users in this channel.
+		true ->
+			lists:foreach(fun(E) -> 
+				spawn(fun() -> helper:requestAsync(element(2, E), {incoming_msg, State#channel_st.channelName, Username, Message}) end) end,
+				State#channel_st.users -- [{Username, Pid}]),
+			{ok, State};
+
+		%% Return an error if the user is not in the channel.
+		false ->
+			{{error, user_not_joined}, State}
 
 	end.
+
+	
+	
+
+
 
 
 

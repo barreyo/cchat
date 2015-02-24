@@ -41,10 +41,10 @@ loop(St, {connect, Server}) ->
                         ok ->
                             NewState = St#cl_st{server = Server},
                             {ok, NewState};
-                        {error, username_already_taken} ->
-                            {{error, username_already_taken, "Username is already taken on server."}, St};
-                        Error ->
-                            {{error, yoyoyo, "Errorororors."}, St}
+                        {error, user_already_connected} ->
+                            {{error, user_already_connected, "Username is already taken on server."}, St};
+                        _Error ->
+                            {{error, generic_error, "Errorororors."}, St}
 
                     end;
                 false ->
@@ -57,7 +57,10 @@ loop(St, disconnect) ->
     
     if 
         St#cl_st.server == disconnected ->
-            {{error, not_connected, "Not connected to any server."}, St};
+            {{error, user_not_connected, "Not connected to any server."}, St};
+
+        length(St#cl_st.channels) /= 0 ->
+            {{error, leave_channels_first, "Leave the channels before disconnecting"}, St};
 
         true ->
             Request = helper:request(list_to_atom(St#cl_st.server), {disconnect, St#cl_st.username, self()}),
@@ -70,7 +73,7 @@ loop(St, {join, Channel}) ->
     
     if 
         St#cl_st.server == disconnected ->
-            {{error, not_connected, "Not connected to any server."}, St};
+            {{error, user_not_connected, "Not connected to any server."}, St};
         
         true ->
             case lists:member(Channel, St#cl_st.channels) of
@@ -87,10 +90,10 @@ loop(St, {join, Channel}) ->
                             NewState = St#cl_st{channels = NewChannelList},
                             {ok, NewState};
 
-                        {{error, user_already_joined}, State} ->
+                        {error, user_already_joined} ->
                             {{error, user_already_joined, "Already in this channel."}, St};
 
-                        Error ->
+                        _Error ->
                             {{error, generic_error, "Channel error."}, St}
 
                     end
@@ -117,22 +120,46 @@ loop(St, {leave, Channel}) ->
                             NewState = St#cl_st{channels = NewChannelList},
                             {ok, NewState};
 
-                        {{error, user_not_joined}, State} ->
-                            {{error, user_not_joined, "Not in this channel."}, State};
+                        {error, user_not_joined} ->
+                            {{error, user_not_joined, "Not in this channel."}, St};
 
-                        Error ->
+                        _Error ->
                             {{error, generic_error, "Channel error."}, St}
                     end;
                 
                 false ->
-                    {{error, user_already_joined, "Not in this channel."}, St}
+                    {{error, user_not_joined, "Not in this channel."}, St}
             end
     end;
 
 % Sending messages
 loop(St, {msg_from_GUI, Channel, Msg}) ->
-    % {ok, St} ;
-    {{error, not_implemented, "Not implemented"}, St} ;
+    
+    if 
+        St#cl_st.server == disconnected ->
+            {{error, not_connected, "Not connected to any server."}, St};
+        
+        true ->
+            case lists:member(Channel, St#cl_st.channels) of
+
+                true ->                    
+                    Request = helper:request(list_to_atom(St#cl_st.server), {write_message, Channel, Msg, St#cl_st.username, self()}),
+
+                    case Request of 
+                        ok ->
+                            {ok, St};
+
+                        {error, user_not_joined} ->
+                            {{error, user_not_joined, "Not in this channel."}, St};
+
+                        _Error ->
+                            {{error, generic_error, "Channel error."}, St}
+                    end;
+                
+                false ->
+                    {{error, user_not_joined, "Not in this channel."}, St}
+            end
+    end;
 
 %% Get current nick
 loop(St, whoami) ->
@@ -140,11 +167,19 @@ loop(St, whoami) ->
 
 %% Change nick
 loop(St, {nick, Nick}) ->
-    NewState = St#cl_st{username = Nick},
-    {ok, NewState};
+    if 
+        St#cl_st.server == disconnected ->
+            NewState = St#cl_st{username = Nick},
+            {ok, NewState}; 
+        true ->
+            {{error, user_already_connected, "Cannot change name while connected to server."}, St} 
+    end;
 
 %% Incoming message
 loop(St = #cl_st { gui = GUIName }, MsgFromClient) ->
     {incoming_msg, Channel, Name, Msg} = MsgFromClient,
     gen_server:call(list_to_atom(GUIName), {msg_to_GUI, Channel, Name++"> "++Msg}),
     {ok, St}.
+
+
+
