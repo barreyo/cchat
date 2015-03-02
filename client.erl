@@ -44,7 +44,7 @@ loop(St, {connect, Server}) ->
                             {{error, user_already_connected, "Username is already taken on server."}, St};
                         
                         _Error ->
-                            {{error, generic_error, "Errorororors."}, St}
+                            {{error, generic_error, "Error while connecting to server."}, St}
 
                     end;
                 false ->
@@ -63,7 +63,7 @@ loop(St, disconnect) ->
             {{error, leave_channels_first, "Leave the channels before disconnecting"}, St};
 
         true ->
-            Request = helper:request(list_to_atom(St#cl_st.server), {disconnect, St#cl_st.username, self()}),
+            helper:request(list_to_atom(St#cl_st.server), {disconnect, St#cl_st.username, self()}),
             NewState = St#cl_st{server = disconnected},
             {ok, NewState}
     end;
@@ -174,6 +174,33 @@ loop(St, {nick, Nick}) ->
         true ->
             {{error, user_already_connected, "Cannot change name while connected to server."}, St} 
     end;
+
+%% Ping a user
+loop(St, {ping, Username}) ->
+    if 
+        St#cl_st.server == disconnected ->
+            {{error, not_connected, "Not connected to any server."}, St};
+        
+        true ->
+            case helper:request(list_to_atom(St#cl_st.server), {ping, Username, self(), now()}) of
+                ok ->
+                    {ok, St};
+
+                {error, user_not_found} ->
+                    {{error, user_not_found, "User not connected to this server."}, St};
+
+                _Error ->
+                    {{error, generic_error, _Error}, St}
+            end
+    end;
+
+loop(St, {pong, FromPid, TimeStamp}) ->
+    helper:requestAsync(FromPid, {incoming_pong, St#cl_st.username, TimeStamp}),
+    {ok, St};
+
+loop(St, {incoming_pong, UserNick, TimeStamp}) ->
+    gen_server:call(list_to_atom(St#cl_st.gui), {msg_to_SYSTEM, io_lib:format("Pong ~s: ~pms", [UserNick, helper:timeSince(TimeStamp)])}),
+    {ok, St}; 
 
 %% Incoming message
 loop(St = #cl_st { gui = GUIName }, MsgFromClient) ->
